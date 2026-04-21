@@ -22,6 +22,7 @@ LABEL="$1"
 ENDPOINT="$2"
 PORT_OVERRIDE="${3:-}"
 CFG="/usr/local/etc/xray/config.json"
+META="/usr/local/etc/xray/vless_meta.json"
 
 if [[ ! -f "${CFG}" ]]; then
   echo "Xray config not found at ${CFG}. Run install_vless_ws.sh first."
@@ -58,6 +59,32 @@ rm -f "${TMP}"
 xray -test -config "${CFG}"
 systemctl restart xray
 
+if [[ -f "${META}" ]]; then
+  SECURITY="$(jq -r '.security // "none"' "${META}")"
+  HOST_HEADER="$(jq -r '.host // ""' "${META}")"
+  SNI="$(jq -r '.sni // ""' "${META}")"
+  DEFAULT_PUBLIC_PORT="$(jq -r '.port // empty' "${META}")"
+else
+  SECURITY="none"
+  HOST_HEADER=""
+  SNI=""
+  DEFAULT_PUBLIC_PORT=""
+fi
+
+if [[ -n "${PORT_OVERRIDE}" ]]; then
+  PUBLIC_PORT="${PORT}"
+elif [[ -n "${DEFAULT_PUBLIC_PORT}" && "${DEFAULT_PUBLIC_PORT}" != "null" ]]; then
+  PUBLIC_PORT="${DEFAULT_PUBLIC_PORT}"
+else
+  PUBLIC_PORT="${PORT_FROM_CONFIG}"
+fi
+
+if [[ "${SECURITY}" == "tls" ]]; then
+  URI="vless://${UUID}@${ENDPOINT}:${PUBLIC_PORT}?type=ws&encryption=none&path=${ENCODED_PATH}&host=${HOST_HEADER}&security=tls&sni=${SNI}#${LABEL}"
+else
+  URI="vless://${UUID}@${ENDPOINT}:${PUBLIC_PORT}?type=ws&encryption=none&path=${ENCODED_PATH}&host=&security=none#${LABEL}"
+fi
+
 echo "Added client: ${LABEL}"
 echo "URI:"
-echo "vless://${UUID}@${ENDPOINT}:${PORT}?type=ws&encryption=none&path=${ENCODED_PATH}&host=&security=none#${LABEL}"
+echo "${URI}"

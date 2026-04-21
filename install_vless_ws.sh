@@ -22,6 +22,7 @@ ENDPOINT="$1"
 PORT="${2:-80}"
 WS_PATH="${3:-/}"
 CFG="/usr/local/etc/xray/config.json"
+META="/usr/local/etc/xray/vless_meta.json"
 
 if ! [[ "${PORT}" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
   echo "Invalid port: ${PORT}"
@@ -91,6 +92,18 @@ EOF
 xray -test -config "${CFG}"
 systemctl enable xray
 systemctl restart xray
+
+cat > "${META}" <<EOF
+{
+  "endpoint": "${ENDPOINT}",
+  "port": ${PORT},
+  "ws_path": "${WS_PATH}",
+  "security": "none",
+  "host": "",
+  "sni": ""
+}
+EOF
+chmod 600 "${META}"
 
 if command -v ufw >/dev/null 2>&1; then
   ufw allow "${PORT}"/tcp || true
