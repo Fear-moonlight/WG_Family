@@ -109,11 +109,12 @@ ${DOMAIN} {
 EOF
 
 caddy validate --config "${CADDYFILE}"
-systemctl enable caddy
-systemctl restart caddy
 
 systemctl enable xray
 systemctl restart xray
+
+systemctl enable caddy
+systemctl restart caddy
 
 cat > "${META}" <<EOF
 {
