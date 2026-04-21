@@ -1,104 +1,141 @@
-# Family VPN Server on Ubuntu 22.04
+# Family VPN Server with AmneziaWG 2.0
 
-This setup uses WireGuard on an Ubuntu 22.04 LTS server with a public IP.
+This repo is now set up for `AmneziaWG 2.0`, not plain WireGuard.
 
-## Why this setup
+AmneziaWG 2.0 is designed to make WireGuard-style traffic harder to identify by DPI by randomizing packet signatures and mimicking common UDP protocols such as QUIC or DNS. It is still `UDP`, not normal TCP HTTPS.
 
-- WireGuard is simpler and faster to run than OpenVPN.
-- It works well for a small family setup.
-- It is easy to add phones, laptops, and tablets later.
+## Why this is the better fit
+
+- Plain WireGuard has a recognizable fingerprint and is often easier to interfere with.
+- AmneziaWG 2.0 is specifically built for censorship resistance.
+- The officially supported setup path is to let the `AmneziaVPN` app connect to your VPS over SSH and install the server-side pieces for you.
 
 ## Important reality check for Iran in April 2026
 
-- Iran has been under severe internet restrictions and long-duration disruptions in 2026.
-- During a near-total or total shutdown of international connectivity, no normal VPS-based VPN can restore access because there is no usable outside path to reach your server.
-- When some international connectivity is available, a personal WireGuard server is still a reasonable first option because it is simple, stable, and under your control.
+- During a near-total international shutdown, no VPS VPN can help because users cannot reach the server at all.
+- When some outside connectivity exists but DPI and protocol interference are active, `AmneziaWG 2.0` is a more realistic starting point than plain WireGuard.
+- If UDP gets heavily degraded or blocked entirely on your users' networks, you may still need a TCP/TLS-based fallback later.
 
-## Files in this folder
+## Official requirements
 
-- `install_wireguard.sh`: first-time server install and initial client generation
-- `add_wireguard_client.sh`: add more devices later
+Based on current Amnezia docs, a VPS should meet these requirements:
 
-## What to prepare
+- OS: `Ubuntu 22.04.x` or `24.04.x`, or `Debian 12/13`
+- Virtualization: `KVM`
+- Public `IPv4` address
+- SSH access as `root` or a passwordless `sudo` user
+- CPU architecture: `x86-64 / amd64`
+- RAM: `1 GB+`
+- Disk: `10 GB+`
+- Linux kernel: `4.14+` for AmneziaWG 2.0
 
-- Ubuntu 22.04 LTS server
-- Public IPv4 address or DNS name
-- SSH access as a sudo user
-- UDP port `51820` open in the cloud firewall
+Important: Amnezia docs say `arm64/aarch64` is not supported for their official VPS workflow.
 
-## Install on the server
+## Files in this repo
 
-Copy these two files to the server, then run:
+- `check_amnezia_vps.sh`: preflight checker for the VPS before you try app-based installation
+- `open_amnezia_port.sh`: helper to open the chosen UDP port in `ufw`
 
-```bash
-chmod +x install_wireguard.sh add_wireguard_client.sh
-sudo bash install_wireguard.sh YOUR_SERVER_IP_OR_DNS 3 51820
-```
-
-Example:
-
-```bash
-sudo bash install_wireguard.sh 203.0.113.10 3 51820
-```
-
-That creates:
-
-- the WireGuard server
-- three client configs:
-  - `/root/wireguard-clients/family-1.conf`
-  - `/root/wireguard-clients/family-2.conf`
-  - `/root/wireguard-clients/family-3.conf`
-
-## Import on family devices
-
-### iPhone / Android
-
-1. Install the official WireGuard app.
-2. On the server, show a QR code:
+## Step 1: Clone on the server
 
 ```bash
-sudo qrencode -t ansiutf8 < /root/wireguard-clients/family-1.conf
+git clone https://github.com/Fear-moonlight/WG_Family.git
+cd WG_Family
+chmod +x check_amnezia_vps.sh open_amnezia_port.sh
+./check_amnezia_vps.sh
 ```
 
-3. In the phone app, scan the QR code.
+If the checker warns about virtualization, CPU architecture, or missing IPv4, fix those before going further.
 
-### Windows / macOS / Linux
+## Step 2: Install AmneziaVPN on your own device
 
-1. Install the WireGuard client.
-2. Copy the `.conf` file securely to the device.
-3. Import the tunnel.
+Install the latest `AmneziaVPN` app on the device you will use for administration:
 
-## Add another family member later
+- iPhone, iPad, or Mac
+- Windows
+- Android
+
+Use version `4.8.12.9` or later for AmneziaWG 2.0 support.
+
+## Step 3: Let the app install the server
+
+In the AmneziaVPN app:
+
+1. Add a new server.
+2. Enter your VPS public IPv4, SSH username, and password or SSH key.
+3. Choose `Automatic` setup or choose `AmneziaWG` manually.
+4. Let the app connect by SSH and install the protocol.
+
+The official docs say this is the supported way to install and manage self-hosted AmneziaWG 2.0.
+
+## Step 4: Change the port immediately
+
+Amnezia installs AmneziaWG with a random port by default.
+
+The current docs explicitly recommend changing it to a port `<= 9999`, for example:
+
+- `443` only if you are intentionally testing that path and are sure nothing else on the server needs it
+- `585`
+- `1234`
+- `8443`
+
+After you pick the port in the Amnezia app, open it on the server:
 
 ```bash
-sudo bash add_wireguard_client.sh mom YOUR_SERVER_IP_OR_DNS 51820
+sudo bash open_amnezia_port.sh 1234
 ```
 
-The new config will be written to:
+Also open the same UDP port in your cloud provider firewall or security group.
+
+## Step 5: Create family device configs
+
+In the AmneziaVPN app:
+
+1. Open your server.
+2. Open the installed `AmneziaWG` protocol.
+3. Generate new guest connections for each family member.
+
+The docs are clear that `AmneziaWG 2.0` requires new keys/configs. Old AmneziaWG legacy configs do not upgrade in place.
+
+## iPhone use
+
+For iPhone:
+
+1. Install the latest `AmneziaVPN` app from the App Store.
+2. From your admin device, share the guest connection with the family member.
+3. Open or import that connection in the iPhone app.
+4. Connect using the `AmneziaWG` profile created from the server.
+
+Unlike plain WireGuard, the normal workflow here is app-managed sharing, not manually scanning a raw WireGuard QR code from the server.
+
+## Basic checks on the server
+
+After installation from the app, these commands are useful:
 
 ```bash
-/root/wireguard-clients/mom.conf
+docker ps
+sudo ss -lunp
+ip -4 addr
+uname -r
 ```
 
-## Basic checks
-
-On the server:
+If you changed to port `1234`, check that it is listening:
 
 ```bash
-sudo systemctl status wg-quick@wg0
-sudo wg show
-sudo ss -lunp | grep 51820
+sudo ss -lunp | grep 1234
 ```
 
-On a connected device, confirm your public IP changed:
+## Troubleshooting notes
 
-```bash
-curl ifconfig.me
-```
+- If your family cannot connect, first try a lower UDP port under `9999`.
+- Make sure the same UDP port is allowed both in `ufw` and in the VPS provider firewall.
+- If the app version is older than `4.8.12.9`, AmneziaWG 2.0 guest configs may not work.
+- If your VPS is `arm64`, `OpenVZ`, or `LXC`, the official installer path may fail.
+- If the network blocks or degrades `UDP` completely, AmneziaWG may still struggle even though it is more DPI-resistant than plain WireGuard.
 
-## Practical notes
+## Sources
 
-- I assumed your Ubuntu version is `22.04`, since `22.24` is not a standard Ubuntu release.
-- If your cloud provider has its own firewall or security group, you must allow inbound UDP `51820` there too.
-- If your family still cannot connect from Iran, the likely cause is active filtering or a broader connectivity event, not a broken WireGuard config.
-- In that case, the next fallback is usually to keep this WireGuard server as the simple baseline and add a second transport on a different server profile rather than changing family devices constantly.
+- [Using AmneziaWG 2.0 Protocol on Self-Hosted Servers](https://amneziavpn.org/documentation/instructions/new-amneziawg-selfhosted/)
+- [VPS Requirements](https://amneziavpn.org/documentation/supported-linux-os-for-vps)
+- [Set Up a Self-Hosted VPN](https://amneziavpn.org/documentation/instructions/install-vpn-on-server)
+- [AmneziaWG Overview](https://amneziavpn.org/documentation/amnezia-wg)
