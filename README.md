@@ -1,141 +1,77 @@
-# Family VPN Server with AmneziaWG 2.0
+# Family VPN Server with VLESS + WebSocket
 
-This repo is now set up for `AmneziaWG 2.0`, not plain WireGuard.
+This repo is now focused on `Xray VLESS + WS` because your tested profile is working in your network:
 
-AmneziaWG 2.0 is designed to make WireGuard-style traffic harder to identify by DPI by randomizing packet signatures and mimicking common UDP protocols such as QUIC or DNS. It is still `UDP`, not normal TCP HTTPS.
+```text
+vless://UUID@HOST:80?type=ws&encryption=none&path=%2F&host=&security=none
+```
 
-## Why this is the better fit
+This setup reproduces that pattern on your own VPS.
 
-- Plain WireGuard has a recognizable fingerprint and is often easier to interfere with.
-- AmneziaWG 2.0 is specifically built for censorship resistance.
-- The officially supported setup path is to let the `AmneziaVPN` app connect to your VPS over SSH and install the server-side pieces for you.
+## What this setup does
 
-## Important reality check for Iran in April 2026
-
-- During a near-total international shutdown, no VPS VPN can help because users cannot reach the server at all.
-- When some outside connectivity exists but DPI and protocol interference are active, `AmneziaWG 2.0` is a more realistic starting point than plain WireGuard.
-- If UDP gets heavily degraded or blocked entirely on your users' networks, you may still need a TCP/TLS-based fallback later.
-
-## Official requirements
-
-Based on current Amnezia docs, a VPS should meet these requirements:
-
-- OS: `Ubuntu 22.04.x` or `24.04.x`, or `Debian 12/13`
-- Virtualization: `KVM`
-- Public `IPv4` address
-- SSH access as `root` or a passwordless `sudo` user
-- CPU architecture: `x86-64 / amd64`
-- RAM: `1 GB+`
-- Disk: `10 GB+`
-- Linux kernel: `4.14+` for AmneziaWG 2.0
-
-Important: Amnezia docs say `arm64/aarch64` is not supported for their official VPS workflow.
+- Installs Xray using the official XTLS installer script
+- Creates a `VLESS + WebSocket` inbound on port `80` by default
+- Uses `security=none` to match your working link style
+- Opens the selected TCP port in `ufw` (if installed)
+- Generates a ready-to-share client URI
 
 ## Files in this repo
 
-- `check_amnezia_vps.sh`: preflight checker for the VPS before you try app-based installation
-- `open_amnezia_port.sh`: helper to open the chosen UDP port in `ufw`
+- `install_vless_ws.sh`: first-time setup and first client creation
+- `add_vless_client.sh`: add extra users/devices later
 
-## Step 1: Clone on the server
+## Quick install on server
 
 ```bash
 git clone https://github.com/Fear-moonlight/WG_Family.git
 cd WG_Family
-chmod +x check_amnezia_vps.sh open_amnezia_port.sh
-./check_amnezia_vps.sh
+chmod +x install_vless_ws.sh add_vless_client.sh
+sudo bash install_vless_ws.sh YOUR_PUBLIC_IP_OR_DOMAIN 80 /
 ```
 
-If the checker warns about virtualization, CPU architecture, or missing IPv4, fix those before going further.
-
-## Step 2: Install AmneziaVPN on your own device
-
-Install the latest `AmneziaVPN` app on the device you will use for administration:
-
-- iPhone, iPad, or Mac
-- Windows
-- Android
-
-Use version `4.8.12.9` or later for AmneziaWG 2.0 support.
-
-## Step 3: Let the app install the server
-
-In the AmneziaVPN app:
-
-1. Add a new server.
-2. Enter your VPS public IPv4, SSH username, and password or SSH key.
-3. Choose `Automatic` setup or choose `AmneziaWG` manually.
-4. Let the app connect by SSH and install the protocol.
-
-The official docs say this is the supported way to install and manage self-hosted AmneziaWG 2.0.
-
-## Step 4: Change the port immediately
-
-Amnezia installs AmneziaWG with a random port by default.
-
-The current docs explicitly recommend changing it to a port `<= 9999`, for example:
-
-- `443` only if you are intentionally testing that path and are sure nothing else on the server needs it
-- `585`
-- `1234`
-- `8443`
-
-After you pick the port in the Amnezia app, open it on the server:
+Example:
 
 ```bash
-sudo bash open_amnezia_port.sh 1234
+sudo bash install_vless_ws.sh 173.199.92.49 80 /
 ```
 
-Also open the same UDP port in your cloud provider firewall or security group.
+At the end, the script prints a `vless://...` URI.
 
-## Step 5: Create family device configs
+## Add separate users
 
-In the AmneziaVPN app:
-
-1. Open your server.
-2. Open the installed `AmneziaWG` protocol.
-3. Generate new guest connections for each family member.
-
-The docs are clear that `AmneziaWG 2.0` requires new keys/configs. Old AmneziaWG legacy configs do not upgrade in place.
-
-## iPhone use
-
-For iPhone:
-
-1. Install the latest `AmneziaVPN` app from the App Store.
-2. From your admin device, share the guest connection with the family member.
-3. Open or import that connection in the iPhone app.
-4. Connect using the `AmneziaWG` profile created from the server.
-
-Unlike plain WireGuard, the normal workflow here is app-managed sharing, not manually scanning a raw WireGuard QR code from the server.
-
-## Basic checks on the server
-
-After installation from the app, these commands are useful:
+Create one user per device so you can revoke people independently.
 
 ```bash
-docker ps
-sudo ss -lunp
-ip -4 addr
-uname -r
+sudo bash add_vless_client.sh mom-iphone 173.199.92.49
+sudo bash add_vless_client.sh dad-laptop 173.199.92.49
 ```
 
-If you changed to port `1234`, check that it is listening:
+Each run creates a new UUID and prints a new URI.
+
+## iPhone usage
+
+1. Install a V2Ray/Xray-compatible iOS client app.
+2. Import by URI.
+3. Paste the generated `vless://...` link.
+4. Connect.
+
+## Important notes
+
+- This is `WS over TCP` without TLS, because we are intentionally matching your currently working format.
+- Without TLS, traffic is easier to fingerprint than proper `WSS/TLS` or `REALITY`.
+- If this starts failing again, the next upgrade path is `VLESS + REALITY` or `WSS + TLS` on `443`.
+
+## Verify on server
 
 ```bash
-sudo ss -lunp | grep 1234
+sudo systemctl status xray --no-pager
+sudo ss -ltnp | grep xray
+sudo journalctl -u xray -n 50 --no-pager
 ```
-
-## Troubleshooting notes
-
-- If your family cannot connect, first try a lower UDP port under `9999`.
-- Make sure the same UDP port is allowed both in `ufw` and in the VPS provider firewall.
-- If the app version is older than `4.8.12.9`, AmneziaWG 2.0 guest configs may not work.
-- If your VPS is `arm64`, `OpenVZ`, or `LXC`, the official installer path may fail.
-- If the network blocks or degrades `UDP` completely, AmneziaWG may still struggle even though it is more DPI-resistant than plain WireGuard.
 
 ## Sources
 
-- [Using AmneziaWG 2.0 Protocol on Self-Hosted Servers](https://amneziavpn.org/documentation/instructions/new-amneziawg-selfhosted/)
-- [VPS Requirements](https://amneziavpn.org/documentation/supported-linux-os-for-vps)
-- [Set Up a Self-Hosted VPN](https://amneziavpn.org/documentation/instructions/install-vpn-on-server)
-- [AmneziaWG Overview](https://amneziavpn.org/documentation/amnezia-wg)
+- [Project X VLESS inbound docs](https://xtls.github.io/en/config/inbounds/vless.html)
+- [Project X WebSocket transport docs](https://xtls.github.io/en/config/transports/websocket)
+- [XTLS official install script](https://github.com/XTLS/Xray-install)
